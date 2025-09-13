@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { ModelViewerModal } from "./components/ModelViewer";
+import { TestGLTF } from "./TestGLTF";
 
 export interface ScanData {
   id: string;
@@ -33,6 +34,7 @@ function App() {
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [scanName, setScanName] = useState('');
   const [selectedModel, setSelectedModel] = useState<{ url: string; title: string } | null>(null);
+  const [showTestPage, setShowTestPage] = useState(false);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -82,16 +84,16 @@ function App() {
       updateScan({ progress: i });
     }
 
-    // Complete with mock model
+    // Complete with mock model (using pencil.glb)
     const mockModel = {
-      url: '/mock-model.glb',
-      description: 'A detailed 3D model of a mechanical component with precise geometric features and surface textures.',
+      url: '/models/pencil.glb',
+      description: 'A detailed 3D pencil model with realistic proportions and materials, rendered from GLB format.',
       measurements: {
-        'Length': '45.2mm',
-        'Width': '23.8mm',
-        'Height': '12.1mm',
-        'Thread Pitch': '1.25mm',
-        'Diameter': '8.5mm'
+        'Length': '175.0mm',
+        'Diameter': '7.5mm',
+        'Tip Length': '12.0mm',
+        'Eraser Length': '8.5mm',
+        'Ferrule Width': '6.8mm'
       }
     };
 
@@ -117,6 +119,11 @@ function App() {
     setListings(prev => [newListing, ...prev]);
   };
 
+  // Show test page if requested
+  if (showTestPage) {
+    return <TestGLTF onBack={() => setShowTestPage(false)} />;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -124,7 +131,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <h1 className="text-2xl font-bold text-gray-900">RotaPrint Scans</h1>
-            <div className="flex space-x-4">
+            <div className="flex space-x-4 items-center">
               <span className="text-sm text-gray-500">{scans.length} scans</span>
               <span className="text-sm text-gray-500">{listings.length} listings</span>
             </div>

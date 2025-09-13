@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { ThreeGLTFViewer } from './ThreeGLBViewer';
 
 interface ModelViewerProps {
   modelUrl: string;
@@ -6,57 +6,10 @@ interface ModelViewerProps {
 }
 
 export function ModelViewer({ modelUrl, className = '' }: ModelViewerProps) {
-  const viewerRef = useRef<HTMLDivElement>(null);
+  console.log('🚀 ModelViewer: Simplified - directly rendering ThreeGLTFViewer for:', modelUrl);
 
-  useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer) return;
-
-    // For now, we'll show a placeholder that indicates 3D model support
-    // In a real implementation, you'd integrate three.js or model-viewer here
-    const placeholder = document.createElement('div');
-    placeholder.className = 'w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg border-2 border-dashed border-gray-300';
-    placeholder.innerHTML = `
-      <div class="text-center p-6">
-        <div class="w-16 h-16 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center">
-          <svg class="w-8 h-8 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd" />
-          </svg>
-        </div>
-        <h3 class="text-sm font-medium text-gray-900 mb-2">3D Model Viewer</h3>
-        <p class="text-xs text-gray-500">GLB model ready for viewing</p>
-        <p class="text-xs text-gray-400 mt-1">${modelUrl}</p>
-        <div class="mt-4 flex justify-center space-x-2">
-          <button class="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors">
-            Rotate
-          </button>
-          <button class="px-3 py-1 bg-gray-600 text-white text-xs rounded hover:bg-gray-700 transition-colors">
-            Zoom
-          </button>
-          <button class="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors">
-            Download
-          </button>
-        </div>
-      </div>
-    `;
-
-    viewer.appendChild(placeholder);
-
-    // Cleanup
-    return () => {
-      if (viewer && placeholder.parentNode) {
-        viewer.removeChild(placeholder);
-      }
-    };
-  }, [modelUrl]);
-
-  return (
-    <div
-      ref={viewerRef}
-      className={`min-h-[300px] ${className}`}
-      data-model-url={modelUrl}
-    />
-  );
+  // Simplified: Just render the ThreeGLTFViewer directly
+  return <ThreeGLTFViewer modelUrl={modelUrl} className={className} />;
 }
 
 // Modal component for full-screen model viewing
