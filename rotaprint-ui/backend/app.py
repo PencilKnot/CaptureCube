@@ -4,10 +4,17 @@ import boto3
 import botocore
 from botocore.exceptions import ClientError
 import os
+import threading
+import uuid
 from datetime import datetime
 import tempfile
 import zipfile
 from collections import defaultdict
+from dotenv import load_dotenv
+from services.video_generation import VideoGenerationService, VideoGenerationManager
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
@@ -19,6 +26,11 @@ s3_client = boto3.client(
     aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
     region_name=os.environ["AWS_REGION"]
 )
+
+# Initialize video generation services
+PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT_ID", "your-project-id")
+video_service = VideoGenerationService(PROJECT_ID, s3_client)
+video_manager = VideoGenerationManager()
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -274,6 +286,191 @@ def image_keys():
         valid_keys=valid_keys,
         invalid_keys=invalid_keys
     ), 200
+
+
+# Video Generation Endpoints
+
+@app.route('/api/video/generate', methods=['POST'])
+def start_video_generation():
+    """Start video generation from S3 images"""
+    data = request.get_json()
+
+    bucket = data.get('bucket')
+    image_keys = data.get('image_keys', [])
+    prompt = data.get('prompt', 'Create a dynamic advertisement video showcasing this product')
+    duration = data.get('duration', 8)
+
+    if not bucket or not image_keys:
+        return jsonify({"error": "bucket and image_keys are required"}), 400
+
+    if not isinstance(image_keys, list) or len(image_keys) == 0:
+        return jsonify({"error": "image_keys must be a non-empty list"}), 400
+
+    try:
+        # Generate unique generation ID
+        generation_id = str(uuid.uuid4())
+
+        # Start video generation in background thread
+        def generate_video():
+            try:
+                # Start the video generation process
+                operation_name = video_service.start_video_generation(
+                    bucket, image_keys, prompt, duration
+                )
+
+                # Track the generation
+                video_manager.start_generation(
+                    PROJECT_ID, operation_name, bucket, image_keys, prompt
+                )
+                video_manager.update_status(generation_id, "processing", 20)
+
+                # Wait for completion
+                video_info = video_service.wait_for_completion(operation_name)
+                video_manager.update_status(generation_id, "downloading", 80)
+
+                # Download video to temporary file
+                temp_video = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+                temp_video.close()
+
+                gcs_uri = video_info.get("gcsUri")
+                if gcs_uri:
+                    video_service.download_video_from_gcs(gcs_uri, temp_video.name)
+                    video_manager.update_status(generation_id, "completed", 100, {
+                        "video_path": temp_video.name,
+                        "gcs_uri": gcs_uri,
+                        "video_info": video_info
+                    })
+                else:
+                    video_manager.update_status(generation_id, "error", 0, {
+                        "error": "No GCS URI returned from video generation"
+                    })
+
+            except Exception as e:
+                video_manager.update_status(generation_id, "error", 0, {
+                    "error": str(e)
+                })
+
+        # Start background thread
+        thread = threading.Thread(target=generate_video)
+        thread.daemon = True
+        thread.start()
+
+        # Initialize tracking
+        video_manager.active_generations[generation_id] = {
+            "status": "starting",
+            "progress": 0,
+            "bucket": bucket,
+            "image_keys": image_keys,
+            "prompt": prompt,
+            "duration": duration,
+            "started_at": datetime.now().isoformat()
+        }
+
+        return jsonify({
+            "generation_id": generation_id,
+            "status": "started",
+            "message": "Video generation started successfully"
+        }), 202
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to start video generation: {str(e)}"}), 500
+
+@app.route('/api/video/status/<generation_id>', methods=['GET'])
+def get_video_generation_status(generation_id):
+    """Get video generation status"""
+    status_info = video_manager.get_status(generation_id)
+
+    if not status_info:
+        return jsonify({"error": "Generation ID not found"}), 404
+
+    return jsonify({
+        "generation_id": generation_id,
+        "status": status_info.get("status", "unknown"),
+        "progress": status_info.get("progress", 0),
+        "bucket": status_info.get("bucket"),
+        "image_count": len(status_info.get("image_keys", [])),
+        "prompt": status_info.get("prompt"),
+        "started_at": status_info.get("started_at"),
+        "video_info": status_info.get("video_info")
+    })
+
+@app.route('/api/video/download/<generation_id>', methods=['GET'])
+def download_generated_video(generation_id):
+    """Download generated video file"""
+    status_info = video_manager.get_status(generation_id)
+
+    if not status_info:
+        return jsonify({"error": "Generation ID not found"}), 404
+
+    if status_info.get("status") != "completed":
+        return jsonify({
+            "error": "Video not ready for download",
+            "status": status_info.get("status")
+        }), 400
+
+    video_info = status_info.get("video_info", {})
+    video_path = video_info.get("video_path")
+
+    if not video_path or not os.path.exists(video_path):
+        return jsonify({"error": "Video file not found"}), 404
+
+    try:
+        return send_file(
+            video_path,
+            as_attachment=True,
+            download_name=f"advertisement_{generation_id}.mp4",
+            mimetype='video/mp4'
+        )
+    except Exception as e:
+        return jsonify({"error": f"Failed to send video file: {str(e)}"}), 500
+
+@app.route('/api/video/generations', methods=['GET'])
+def list_video_generations():
+    """List all video generations"""
+    generations = []
+
+    for gen_id, info in video_manager.active_generations.items():
+        generations.append({
+            "generation_id": gen_id,
+            "status": info.get("status"),
+            "progress": info.get("progress", 0),
+            "bucket": info.get("bucket"),
+            "image_count": len(info.get("image_keys", [])),
+            "prompt": info.get("prompt", "")[:100] + "..." if len(info.get("prompt", "")) > 100 else info.get("prompt", ""),
+            "started_at": info.get("started_at")
+        })
+
+    # Sort by started_at (newest first)
+    generations.sort(key=lambda x: x.get("started_at", ""), reverse=True)
+
+    return jsonify({
+        "generations": generations,
+        "total_count": len(generations)
+    })
+
+@app.route('/api/video/cleanup/<generation_id>', methods=['DELETE'])
+def cleanup_video_generation(generation_id):
+    """Clean up completed video generation"""
+    status_info = video_manager.get_status(generation_id)
+
+    if not status_info:
+        return jsonify({"error": "Generation ID not found"}), 404
+
+    try:
+        # Clean up video file if it exists
+        video_info = status_info.get("video_info", {})
+        video_path = video_info.get("video_path")
+
+        if video_path and os.path.exists(video_path):
+            os.unlink(video_path)
+
+        # Remove from tracking
+        video_manager.remove_generation(generation_id)
+
+        return jsonify({"message": "Video generation cleaned up successfully"})
+
+    except Exception as e:
+        return jsonify({"error": f"Failed to cleanup: {str(e)}"}), 500
 
 
 if __name__ == '__main__':

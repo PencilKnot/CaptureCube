@@ -55,66 +55,141 @@ function App() {
     };
 
     setProjects(prev => [newProject, ...prev]);
+
+    try {
+      // Call backend API to start video generation
+      const response = await fetch('http://localhost:8000/api/video/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          bucket: 'htn-test-bucket', // You can make this configurable later
+          image_keys: s3ImageKeys,
+          prompt: `Create a compelling advertisement video for ${projectName.trim()}. Show the product in an attractive and dynamic way with smooth transitions between scenes.`,
+          duration: 8
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      // Update project with generation ID and start polling for status
+      const updatedProject = { ...newProject, id: result.generation_id };
+      setProjects(prev => prev.map(p => p.id === newProject.id ? updatedProject : p));
+
+      // Start polling for generation status
+      pollGenerationStatus(result.generation_id);
+
+    } catch (error) {
+      console.error('Failed to start video generation:', error);
+
+      // Update project status to error
+      setProjects(prev => prev.map(p =>
+        p.id === newProject.id
+          ? { ...p, status: 'error', progress: 0 }
+          : p
+      ));
+    }
+
     setS3ImageKeys([]);
     setProjectName('');
-
-    // Mock ad generation process
-    simulateAdGeneration(newProject.id);
   };
 
-  const simulateAdGeneration = async (projectId: string) => {
-    const updateProject = (updates: Partial<AdProject>) => {
-      setProjects(prev => prev.map(project =>
-        project.id === projectId ? { ...project, ...updates } : project
-      ));
+  const pollGenerationStatus = async (generationId: string) => {
+    const pollInterval = 5000; // Poll every 5 seconds
+    const maxPolls = 120; // 10 minutes maximum
+    let pollCount = 0;
+
+    const poll = async () => {
+      if (pollCount >= maxPolls) {
+        console.error('Polling timeout for generation:', generationId);
+        setProjects(prev => prev.map(p =>
+          p.id === generationId
+            ? { ...p, status: 'error', progress: 0 }
+            : p
+        ));
+        return;
+      }
+
+      try {
+        const response = await fetch(`http://localhost:8000/api/video/status/${generationId}`);
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const statusData = await response.json();
+
+        // Update project with current status
+        setProjects(prev => prev.map(p =>
+          p.id === generationId
+            ? {
+                ...p,
+                status: statusData.status === 'completed' ? 'completed' :
+                       statusData.status === 'error' ? 'error' : 'generating',
+                progress: statusData.progress || 0
+              }
+            : p
+        ));
+
+        if (statusData.status === 'completed') {
+          // Create advertisement data and campaign
+          const advertisement = {
+            videoUrl: `http://localhost:8000/api/video/download/${generationId}`,
+            description: 'AI-generated advertisement video showcasing your product',
+            script: statusData.prompt,
+            duration: 8
+          };
+
+          // Update project with advertisement
+          setProjects(prev => prev.map(p =>
+            p.id === generationId
+              ? { ...p, advertisement }
+              : p
+          ));
+
+          // Create campaign
+          const project = projects.find(p => p.id === generationId);
+          if (project) {
+            const newCampaign: AdCampaign = {
+              id: Date.now().toString(),
+              projectId: generationId,
+              title: `${project.name} - AI Advertisement`,
+              description: advertisement.description,
+              videoUrl: advertisement.videoUrl,
+              script: advertisement.script,
+              targetAudience: 'Target Audience',
+              duration: advertisement.duration,
+              category: 'AI Generated',
+              createdAt: new Date(),
+            };
+
+            setCampaigns(prev => [newCampaign, ...prev]);
+          }
+
+        } else if (statusData.status === 'error') {
+          console.error('Video generation failed:', statusData);
+        } else {
+          // Continue polling
+          pollCount++;
+          setTimeout(poll, pollInterval);
+        }
+
+      } catch (error) {
+        console.error('Error polling generation status:', error);
+        pollCount++;
+        setTimeout(poll, pollInterval);
+      }
     };
 
-    // Simulate downloading images from S3
-    for (let i = 0; i <= 100; i += 20) {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      updateProject({ progress: i });
-    }
-
-    // Start generating advertisement
-    updateProject({ status: 'generating', progress: 0 });
-
-    // Simulate video generation
-    for (let i = 0; i <= 100; i += 10) {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      updateProject({ progress: i });
-    }
-
-    // Complete with mock advertisement
-    const mockAd = {
-      videoUrl: '/videos/sample.mp4',
-      description: 'A compelling 30-second advertisement showcasing the product with dynamic visuals and engaging narrative.',
-      script: 'Discover innovation at its finest. Our premium product combines style and functionality to deliver an unmatched experience. Get yours today!',
-      duration: 30
-    };
-
-    updateProject({
-      status: 'completed',
-      progress: 100,
-      advertisement: mockAd
-    });
-
-    // Auto-create campaign
-    const project = projects.find(p => p.id === projectId);
-    const newCampaign: AdCampaign = {
-      id: Date.now().toString(),
-      projectId: projectId,
-      title: `${project?.name || 'Unnamed Project'} - Advertisement Campaign`,
-      description: mockAd.description,
-      videoUrl: mockAd.videoUrl,
-      script: mockAd.script,
-      targetAudience: 'General Consumers',
-      duration: mockAd.duration,
-      category: 'Product Marketing',
-      createdAt: new Date(),
-    };
-
-    setCampaigns(prev => [newCampaign, ...prev]);
+    // Start polling
+    poll();
   };
+
 
   // Show test page if requested
   if (showTestPage) {
