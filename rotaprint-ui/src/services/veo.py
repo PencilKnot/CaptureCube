@@ -5,7 +5,7 @@ from google.auth import default
 from google.auth.transport.requests import Request
 from google.cloud import storage
 
-PROJECT_ID = "your-project-id" 
+PROJECT_ID = "htn-scanner" 
 
 def image_to_base64(file_path: str) -> str:
     with open(file_path, "rb") as image_file:
@@ -35,7 +35,7 @@ def start_process(access_token, images, prompt):
         }],
         "parameters": {
             "durationSeconds": 8,
-            "storageUri": "gs://{PROJECT_ID}-capture-cube/",
+            "storageUri": "gs://htn-bucket-test/",
             "sampleCount": 1
         }
     }
@@ -105,6 +105,6 @@ if __name__ == "__main__":
     gcs_uri = video_info.get("gcsUri")
     
     if gcs_uri:
-        download_video(gcs_uri, "rotaprint-ui/src/assets/output.mp4")
+        download_video(gcs_uri, "rotaprint-ui/src/assets/test.mp4")
     else:
         print("No GCS URI found.")

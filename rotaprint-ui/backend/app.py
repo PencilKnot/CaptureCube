@@ -28,7 +28,7 @@ s3_client = boto3.client(
 )
 
 # Initialize video generation services
-PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT_ID", "your-project-id")
+PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT_ID", "htn-scanner")
 video_service = VideoGenerationService(PROJECT_ID, s3_client)
 video_manager = VideoGenerationManager()
 
@@ -313,19 +313,38 @@ def start_video_generation():
         # Start video generation in background thread
         def generate_video():
             try:
+                print(f"🎬 Starting video generation for {generation_id}")
+
+                # Update status to downloading (preparing images)
+                video_manager.update_status(generation_id, "downloading", 10)
+
+                # Test authentication first
+                try:
+                    access_token = video_service.get_access_token()
+                    print(f"✅ Authentication successful")
+                except Exception as auth_error:
+                    raise Exception(f"Google Cloud authentication failed: {str(auth_error)}. Please check your service account credentials.")
+
+                # Update status to processing images
+                video_manager.update_status(generation_id, "processing", 20)
+
                 # Start the video generation process
                 operation_name = video_service.start_video_generation(
                     bucket, image_keys, prompt, duration
                 )
+                print(f"✅ Video generation started with operation: {operation_name}")
 
                 # Track the generation
                 video_manager.start_generation(
                     PROJECT_ID, operation_name, bucket, image_keys, prompt
                 )
-                video_manager.update_status(generation_id, "processing", 20)
+                video_manager.update_status(generation_id, "generating", 30)
 
-                # Wait for completion
+                # Wait for completion with progress updates
+                print(f"⏳ Waiting for video generation to complete...")
                 video_info = video_service.wait_for_completion(operation_name)
+                print(f"✅ Video generation completed")
+
                 video_manager.update_status(generation_id, "downloading", 80)
 
                 # Download video to temporary file
@@ -334,20 +353,22 @@ def start_video_generation():
 
                 gcs_uri = video_info.get("gcsUri")
                 if gcs_uri:
+                    print(f"📥 Downloading video from: {gcs_uri}")
                     video_service.download_video_from_gcs(gcs_uri, temp_video.name)
                     video_manager.update_status(generation_id, "completed", 100, {
                         "video_path": temp_video.name,
                         "gcs_uri": gcs_uri,
                         "video_info": video_info
                     })
+                    print(f"✅ Video generation completed successfully")
                 else:
-                    video_manager.update_status(generation_id, "error", 0, {
-                        "error": "No GCS URI returned from video generation"
-                    })
+                    raise Exception("No GCS URI returned from video generation")
 
             except Exception as e:
+                error_msg = str(e)
+                print(f"❌ Video generation failed: {error_msg}")
                 video_manager.update_status(generation_id, "error", 0, {
-                    "error": str(e)
+                    "error": error_msg
                 })
 
         # Start background thread

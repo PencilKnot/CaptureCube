@@ -19,7 +19,7 @@ class VideoGenerationService:
     def __init__(self, project_id: str, s3_client=None):
         self.project_id = project_id
         self.s3_client = s3_client
-        self.base_url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models/veo-2.0-generate-exp"
+        self.base_url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/us-central1/publishers/google/models/veo-2.0-generate-exp"
 
     def get_access_token(self) -> str:
         """Get Google Cloud access token"""
@@ -63,10 +63,13 @@ class VideoGenerationService:
 
         for key in image_keys:
             try:
-                base64_image = self.s3_image_to_base64(bucket, key)
+                # Clean up the key - remove any s3:// prefix and bucket name if present
+                clean_key = self.clean_s3_key(key, bucket)
+
+                base64_image = self.s3_image_to_base64(bucket, clean_key)
 
                 # Determine MIME type from file extension
-                extension = key.lower().split('.')[-1]
+                extension = clean_key.lower().split('.')[-1]
                 mime_type = {
                     'jpg': 'image/jpeg',
                     'jpeg': 'image/jpeg',
@@ -82,6 +85,7 @@ class VideoGenerationService:
                     },
                     "referenceType": "asset"
                 })
+                print(f"✅ Successfully processed image: {clean_key}")
             except Exception as e:
                 print(f"Warning: Failed to process image {key}: {str(e)}")
                 continue
@@ -91,10 +95,38 @@ class VideoGenerationService:
 
         return image_list
 
+    def clean_s3_key(self, key: str, expected_bucket: str) -> str:
+        """Clean S3 key to remove prefixes and ensure correct format"""
+        # Remove s3:// prefix if present
+        if key.startswith("s3://"):
+            key = key[5:]
+
+        # Remove bucket name prefix if present
+        if key.startswith(f"{expected_bucket}/"):
+            key = key[len(f"{expected_bucket}/"):]
+        elif key.startswith("htn-test-bucket/"):
+            key = key[len("htn-test-bucket/"):]
+        elif key.startswith("htn-bucket-test/"):
+            key = key[len("htn-bucket-test/"):]
+
+        return key
+
     def start_video_generation(self, bucket: str, image_keys: List[str], prompt: str, duration: int = 8) -> str:
         """Start video generation process"""
-        access_token = self.get_access_token()
-        image_list = self.prepare_images_from_s3(bucket, image_keys)
+        print(f"🎬 Starting video generation with {len(image_keys)} images")
+
+        # Get access token with detailed error handling
+        try:
+            access_token = self.get_access_token()
+        except Exception as e:
+            raise Exception(f"Authentication failed: {str(e)}. Please check your Google Cloud credentials and permissions.")
+
+        # Prepare images with detailed logging
+        try:
+            image_list = self.prepare_images_from_s3(bucket, image_keys)
+            print(f"✅ Prepared {len(image_list)} images for video generation")
+        except Exception as e:
+            raise Exception(f"Failed to prepare images from S3: {str(e)}")
 
         request_payload = {
             "instances": [{
@@ -103,7 +135,7 @@ class VideoGenerationService:
             }],
             "parameters": {
                 "durationSeconds": duration,
-                "storageUri": f"gs://{self.project_id}-capture-cube/",
+                "storageUri": "gs://htn-bucket-test/",
                 "sampleCount": 1
             }
         }
@@ -113,18 +145,39 @@ class VideoGenerationService:
             "Content-Type": "application/json"
         }
 
-        response = requests.post(
-            f"{self.base_url}:predictLongRunning",
-            headers=headers,
-            json=request_payload
-        )
+        print(f"🚀 Calling Veo API with prompt: {prompt[:100]}...")
 
-        if not response.ok:
-            error_msg = f"Video generation failed: {response.status_code} - {response.text}"
+        try:
+            response = requests.post(
+                f"{self.base_url}:predictLongRunning",
+                headers=headers,
+                json=request_payload,
+                timeout=60
+            )
+        except requests.exceptions.Timeout:
+            raise Exception("Video generation request timed out. Please try again.")
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Network error during video generation request: {str(e)}")
+
+        if response.status_code == 403:
+            error_details = response.text
+            raise Exception(f"Permission denied (403): Your Google Cloud account lacks permissions for Vertex AI Veo API. Error details: {error_details}")
+        elif response.status_code == 404:
+            raise Exception(f"Veo API not found (404): The Veo model may not be available in your region or project")
+        elif not response.ok:
+            error_msg = f"Video generation request failed with status {response.status_code}: {response.text}"
             raise Exception(error_msg)
 
-        result = response.json()
-        return result.get("name")
+        try:
+            result = response.json()
+            operation_name = result.get("name")
+            if not operation_name:
+                raise Exception("No operation name returned from Veo API")
+
+            print(f"✅ Video generation started successfully: {operation_name}")
+            return operation_name
+        except ValueError as e:
+            raise Exception(f"Invalid JSON response from Veo API: {str(e)}")
 
     def check_video_status(self, operation_name: str) -> Dict[str, Any]:
         """Check video generation status"""
@@ -174,7 +227,7 @@ class VideoGenerationService:
         try:
             # Parse GCS URI
             parts = gcs_uri[5:].split("/", 1)
-            bucket_name = parts[0]
+            bucket_name = "htn-bucket-test"
             blob_name = parts[1]
 
             # Initialize GCS client
@@ -216,6 +269,7 @@ class VideoGenerationService:
             }
 
         except Exception as e:
+            print(e)
             return {
                 "success": False,
                 "error": str(e),

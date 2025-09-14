@@ -12,7 +12,7 @@ from datetime import datetime
 
 # Backend configuration
 BASE_URL = "http://localhost:8000"
-TEST_BUCKET = "htn-test-bucket"
+TEST_BUCKET = "htn-bucket-test"
 
 def print_header(title):
     """Print a formatted test section header"""
@@ -41,19 +41,50 @@ def print_result(test_name, success, data=None, error=None):
         print(f"   ❌ Error: {error}")
     print("-" * 40)
 
+def get_valid_s3_keys():
+    """Get valid S3 keys from the latest directory"""
+    try:
+        # First get the latest directory
+        response = requests.get(f"{BASE_URL}/api/s3/latest-directory?bucket=htn-test-bucket", timeout=30)
+
+        if response.status_code == 200:
+            data = response.json()
+            image_keys = data.get("image_keys", [])
+
+            if image_keys:
+                print(f"✅ Found {len(image_keys)} images in latest directory")
+                return image_keys[:3]  # Use first 3 images
+            else:
+                print("❌ No image keys found in latest directory")
+                return []
+        else:
+            print(f"❌ Failed to get latest directory: {response.status_code}")
+            return []
+
+    except Exception as e:
+        print(f"❌ Error getting S3 keys: {e}")
+        return []
+
 def test_start_video_generation():
     """Test starting video generation"""
     print_header("Start Video Generation Test")
 
-    # Use sample S3 keys (these should exist in your bucket)
-    test_image_keys = [
-        "images/sample1.jpg",
-        "images/sample2.jpg",
-        "images/sample3.jpg"
-    ]
+    # Get valid S3 keys dynamically
+    test_image_keys = get_valid_s3_keys()
+
+    if not test_image_keys:
+        # Fallback to manual keys
+        test_image_keys = [
+            "run_2025-09-14_04-21-42/0a.jpg",
+            "run_2025-09-14_04-21-42/1a.jpg",
+            "run_2025-09-14_04-21-42/2a.jpg"
+        ]
+        print("⚠️  Using fallback S3 keys (may not exist)")
+
+    print(f"📸 Using image keys: {test_image_keys}")
 
     payload = {
-        "bucket": TEST_BUCKET,
+        "bucket": "htn-test-bucket",  # Use the actual bucket with images
         "image_keys": test_image_keys,
         "prompt": "Create a dynamic product advertisement showcasing innovation and quality",
         "duration": 8
