@@ -418,6 +418,7 @@ function App() {
                               href={campaign.downloadUrl}
                               download
                               className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition-colors inline-block font-medium"
+                              style={{ color: 'white' }}
                             >
                               Download Video
                             </a>
