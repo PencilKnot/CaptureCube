@@ -6,14 +6,63 @@ interface VideoPreviewProps {
 }
 
 export function VideoPreview({ videoUrl, className = '' }: VideoPreviewProps) {
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [hasError, setHasError] = React.useState(false);
+
+  const handleLoadStart = () => {
+    setIsLoading(true);
+    setHasError(false);
+  };
+
+  const handleCanPlay = () => {
+    setIsLoading(false);
+  };
+
+  const handleError = () => {
+    setIsLoading(false);
+    setHasError(true);
+  };
+
   return (
-    <video
-      controls
-      className={`w-full h-full object-contain ${className}`}
-      src={videoUrl}
-    >
-      Your browser does not support the video tag.
-    </video>
+    <div className="relative">
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+            <p className="mt-2 text-sm text-gray-600">Loading video...</p>
+          </div>
+        </div>
+      )}
+
+      {hasError ? (
+        <div className="flex items-center justify-center bg-gray-100 rounded p-8">
+          <div className="text-center">
+            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="mt-2 text-sm text-gray-600">Failed to load video</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-2 text-purple-600 hover:text-purple-700 text-sm underline"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      ) : (
+        <video
+          controls
+          className={`w-full h-full object-contain ${className}`}
+          src={videoUrl}
+          onLoadStart={handleLoadStart}
+          onCanPlay={handleCanPlay}
+          onError={handleError}
+          preload="metadata"
+        >
+          Your browser does not support the video tag.
+        </video>
+      )}
+    </div>
   );
 }
 

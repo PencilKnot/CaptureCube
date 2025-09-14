@@ -445,6 +445,35 @@ def download_generated_video(generation_id):
     except Exception as e:
         return jsonify({"error": f"Failed to send video file: {str(e)}"}), 500
 
+@app.route('/api/video/stream/<generation_id>', methods=['GET'])
+def stream_generated_video(generation_id):
+    """Stream generated video for embedding/viewing"""
+    status_info = video_manager.get_status(generation_id)
+
+    if not status_info:
+        return jsonify({"error": "Generation ID not found"}), 404
+
+    if status_info.get("status") != "completed":
+        return jsonify({
+            "error": "Video not ready for streaming",
+            "status": status_info.get("status")
+        }), 400
+
+    video_info = status_info.get("video_info", {})
+    video_path = video_info.get("video_path")
+
+    if not video_path or not os.path.exists(video_path):
+        return jsonify({"error": "Video file not found"}), 404
+
+    try:
+        return send_file(
+            video_path,
+            as_attachment=False,  # For streaming, not download
+            mimetype='video/mp4'
+        )
+    except Exception as e:
+        return jsonify({"error": f"Failed to stream video file: {str(e)}"}), 500
+
 @app.route('/api/video/generations', methods=['GET'])
 def list_video_generations():
     """List all video generations"""

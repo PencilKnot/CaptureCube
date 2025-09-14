@@ -8,6 +8,7 @@ import time
 import requests
 import os
 import tempfile
+import subprocess
 from typing import List, Dict, Any, Optional
 from google.auth import default
 from google.auth.transport.requests import Request
@@ -241,6 +242,29 @@ class VideoGenerationService:
 
         except Exception as e:
             raise Exception(f"Failed to download video from GCS: {str(e)}")
+
+    def get_video_duration(self, video_path: str) -> float:
+        """Get actual video duration using ffprobe"""
+        try:
+            # Use ffprobe to get video duration
+            result = subprocess.run([
+                'ffprobe', '-v', 'quiet', '-show_entries',
+                'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1',
+                video_path
+            ], capture_output=True, text=True, timeout=30)
+
+            if result.returncode == 0:
+                duration = float(result.stdout.strip())
+                return round(duration, 2)
+            else:
+                print(f"Warning: Could not get video duration for {video_path}")
+                return 8.0  # Default fallback
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, ValueError, FileNotFoundError):
+            print(f"Warning: ffprobe not available or failed, using default duration")
+            return 8.0  # Default fallback
+        except Exception as e:
+            print(f"Warning: Error getting video duration: {e}")
+            return 8.0  # Default fallback
 
     def generate_video_complete(self, bucket: str, image_keys: List[str], prompt: str, duration: int = 8) -> Dict[str, Any]:
         """Complete video generation workflow"""

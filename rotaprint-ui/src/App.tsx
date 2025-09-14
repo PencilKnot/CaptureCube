@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { VideoPreviewModal } from "./components/VideoPreview";
 import { TestGLTF } from "./TestGLTF";
 
 export interface AdProject {
@@ -10,6 +9,7 @@ export interface AdProject {
   progress: number;
   advertisement?: {
     videoUrl: string;
+    downloadUrl?: string;
     description: string;
     script?: string;
     duration?: number;
@@ -23,6 +23,7 @@ export interface AdCampaign {
   title: string;
   description: string;
   videoUrl: string;
+  downloadUrl?: string;
   script?: string;
   targetAudience?: string;
   duration?: number;
@@ -35,7 +36,6 @@ function App() {
   const [campaigns, setCampaigns] = useState<AdCampaign[]>([]);
   const [s3ImageKeys, setS3ImageKeys] = useState<string[]>([]);
   const [projectName, setProjectName] = useState('');
-  const [selectedVideo, setSelectedVideo] = useState<{ url: string; title: string } | null>(null);
   const [showTestPage, setShowTestPage] = useState(false);
 
   const handleS3KeyInput = (keys: string[]) => {
@@ -139,7 +139,8 @@ function App() {
         if (statusData.status === 'completed') {
           // Create advertisement data and campaign
           const advertisement = {
-            videoUrl: `http://localhost:8000/api/video/download/${generationId}`,
+            videoUrl: `http://localhost:8000/api/video/stream/${generationId}`,
+            downloadUrl: `http://localhost:8000/api/video/download/${generationId}`,
             description: 'AI-generated advertisement video showcasing your product',
             script: statusData.prompt,
             duration: 8
@@ -161,6 +162,7 @@ function App() {
               title: `${project.name} - AI Advertisement`,
               description: advertisement.description,
               videoUrl: advertisement.videoUrl,
+              downloadUrl: advertisement.downloadUrl,
               script: advertisement.script,
               targetAudience: 'Target Audience',
               duration: advertisement.duration,
@@ -352,6 +354,20 @@ function App() {
                                   </div>
                                 )}
                               </div>
+
+                              {/* Video Actions */}
+                              <div className="flex justify-center mt-4">
+                                {project.advertisement!.downloadUrl && (
+                                  <a
+                                    href={project.advertisement!.downloadUrl}
+                                    download
+                                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm transition-colors inline-block font-medium shadow-sm"
+                                    style={{ color: 'white' }}
+                                  >
+                                    Download Video
+                                  </a>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -396,12 +412,17 @@ function App() {
                           )}
                         </div>
 
-                        <button
-                          onClick={() => setSelectedVideo({ url: campaign.videoUrl, title: campaign.title })}
-                          className="ml-4 bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 transition-colors"
-                        >
-                          Preview Video
-                        </button>
+                        <div className="ml-4">
+                          {campaign.downloadUrl && (
+                            <a
+                              href={campaign.downloadUrl}
+                              download
+                              className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition-colors inline-block font-medium"
+                            >
+                              Download Video
+                            </a>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -412,13 +433,6 @@ function App() {
         </div>
       </div>
 
-      {/* Video Preview Modal */}
-      <VideoPreviewModal
-        isOpen={selectedVideo !== null}
-        onClose={() => setSelectedVideo(null)}
-        videoUrl={selectedVideo?.url || ''}
-        title={selectedVideo?.title || ''}
-      />
     </div>
   );
 }
