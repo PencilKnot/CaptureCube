@@ -297,7 +297,7 @@ def start_video_generation():
 
     bucket = data.get('bucket')
     image_keys = data.get('image_keys', [])
-    prompt = data.get('prompt', 'Create a dynamic advertisement video showcasing this product')
+    prompt = data.get('prompt', "Cinematic close-up of a keychain charm with blue keycaps and white switches. Faithfully reproduce the shape, colors, and details from the reference image. Well-lit, ultra-high-resolution, sharp focus, minimal noise. Minimalist neutral background, soft shadows, realistic reflections. Product isolated in frame, camera slowly rotates around the charm to show all angles. Don't add any new features/characterstics to the product that are not in the reference image.")
     duration = data.get('duration', 8)
 
     if not bucket or not image_keys:
