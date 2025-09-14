@@ -1,122 +1,119 @@
 import React, { useState } from "react";
-import { ModelViewerModal } from "./components/ModelViewer";
+import { VideoPreviewModal } from "./components/VideoPreview";
 import { TestGLTF } from "./TestGLTF";
 
-export interface ScanData {
+export interface AdProject {
   id: string;
   name: string;
-  images: File[];
-  status: 'uploading' | 'processing' | 'completed' | 'error';
+  s3ImageKeys: string[];
+  status: 'downloading' | 'generating' | 'completed' | 'error';
   progress: number;
-  model?: {
-    url: string;
+  advertisement?: {
+    videoUrl: string;
     description: string;
-    measurements?: Record<string, string>;
+    script?: string;
+    duration?: number;
   };
   createdAt: Date;
 }
 
-export interface ScanListing {
+export interface AdCampaign {
   id: string;
-  scanId: string;
+  projectId: string;
   title: string;
   description: string;
-  modelUrl: string;
-  measurements?: Record<string, string>;
-  price?: number;
+  videoUrl: string;
+  script?: string;
+  targetAudience?: string;
+  duration?: number;
   category: string;
   createdAt: Date;
 }
 
 function App() {
-  const [scans, setScans] = useState<ScanData[]>([]);
-  const [listings, setListings] = useState<ScanListing[]>([]);
-  const [selectedImages, setSelectedImages] = useState<File[]>([]);
-  const [scanName, setScanName] = useState('');
-  const [selectedModel, setSelectedModel] = useState<{ url: string; title: string } | null>(null);
+  const [projects, setProjects] = useState<AdProject[]>([]);
+  const [campaigns, setCampaigns] = useState<AdCampaign[]>([]);
+  const [s3ImageKeys, setS3ImageKeys] = useState<string[]>([]);
+  const [projectName, setProjectName] = useState('');
+  const [selectedVideo, setSelectedVideo] = useState<{ url: string; title: string } | null>(null);
   const [showTestPage, setShowTestPage] = useState(false);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setSelectedImages(Array.from(e.target.files));
-    }
+  const handleS3KeyInput = (keys: string[]) => {
+    setS3ImageKeys(keys);
   };
 
-  const startScan = async () => {
-    if (selectedImages.length === 0 || !scanName.trim()) return;
+  const startAdGeneration = async () => {
+    if (s3ImageKeys.length === 0 || !projectName.trim()) return;
 
-    const newScan: ScanData = {
+    const newProject: AdProject = {
       id: Date.now().toString(),
-      name: scanName.trim(),
-      images: selectedImages,
-      status: 'uploading',
+      name: projectName.trim(),
+      s3ImageKeys: s3ImageKeys,
+      status: 'downloading',
       progress: 0,
       createdAt: new Date(),
     };
 
-    setScans(prev => [newScan, ...prev]);
-    setSelectedImages([]);
-    setScanName('');
+    setProjects(prev => [newProject, ...prev]);
+    setS3ImageKeys([]);
+    setProjectName('');
 
-    // Mock scanning process
-    simulateScanProcess(newScan.id);
+    // Mock ad generation process
+    simulateAdGeneration(newProject.id);
   };
 
-  const simulateScanProcess = async (scanId: string) => {
-    const updateScan = (updates: Partial<ScanData>) => {
-      setScans(prev => prev.map(scan =>
-        scan.id === scanId ? { ...scan, ...updates } : scan
+  const simulateAdGeneration = async (projectId: string) => {
+    const updateProject = (updates: Partial<AdProject>) => {
+      setProjects(prev => prev.map(project =>
+        project.id === projectId ? { ...project, ...updates } : project
       ));
     };
 
-    // Simulate upload
+    // Simulate downloading images from S3
     for (let i = 0; i <= 100; i += 20) {
       await new Promise(resolve => setTimeout(resolve, 300));
-      updateScan({ progress: i });
+      updateProject({ progress: i });
     }
 
-    // Start processing
-    updateScan({ status: 'processing', progress: 0 });
+    // Start generating advertisement
+    updateProject({ status: 'generating', progress: 0 });
 
-    // Simulate processing
+    // Simulate video generation
     for (let i = 0; i <= 100; i += 10) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      updateScan({ progress: i });
+      await new Promise(resolve => setTimeout(resolve, 800));
+      updateProject({ progress: i });
     }
 
-    // Complete with mock model (using pencil.glb)
-    const mockModel = {
-      url: '/models/pencil.glb',
-      description: 'A detailed 3D pencil model with realistic proportions and materials, rendered from GLB format.',
-      measurements: {
-        'Length': '175.0mm',
-        'Diameter': '7.5mm',
-        'Tip Length': '12.0mm',
-        'Eraser Length': '8.5mm',
-        'Ferrule Width': '6.8mm'
-      }
+    // Complete with mock advertisement
+    const mockAd = {
+      videoUrl: '/videos/sample.mp4',
+      description: 'A compelling 30-second advertisement showcasing the product with dynamic visuals and engaging narrative.',
+      script: 'Discover innovation at its finest. Our premium product combines style and functionality to deliver an unmatched experience. Get yours today!',
+      duration: 30
     };
 
-    updateScan({
+    updateProject({
       status: 'completed',
       progress: 100,
-      model: mockModel
+      advertisement: mockAd
     });
 
-    // Auto-create listing
-    const scan = scans.find(s => s.id === scanId);
-    const newListing: ScanListing = {
+    // Auto-create campaign
+    const project = projects.find(p => p.id === projectId);
+    const newCampaign: AdCampaign = {
       id: Date.now().toString(),
-      scanId: scanId,
-      title: `${scan?.name || 'Unnamed Scan'} - 3D Model`,
-      description: mockModel.description,
-      modelUrl: mockModel.url,
-      measurements: mockModel.measurements,
-      category: 'Hardware',
+      projectId: projectId,
+      title: `${project?.name || 'Unnamed Project'} - Advertisement Campaign`,
+      description: mockAd.description,
+      videoUrl: mockAd.videoUrl,
+      script: mockAd.script,
+      targetAudience: 'General Consumers',
+      duration: mockAd.duration,
+      category: 'Product Marketing',
       createdAt: new Date(),
     };
 
-    setListings(prev => [newListing, ...prev]);
+    setCampaigns(prev => [newCampaign, ...prev]);
   };
 
   // Show test page if requested
@@ -130,10 +127,10 @@ function App() {
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
-            <h1 className="text-2xl font-bold text-gray-900">RotaPrint Scans</h1>
+            <h1 className="text-2xl font-bold text-gray-900">AdGen Studio</h1>
             <div className="flex space-x-4 items-center">
-              <span className="text-sm text-gray-500">{scans.length} scans</span>
-              <span className="text-sm text-gray-500">{listings.length} listings</span>
+              <span className="text-sm text-gray-500">{projects.length} projects</span>
+              <span className="text-sm text-gray-500">{campaigns.length} campaigns</span>
             </div>
           </div>
         </div>
@@ -142,148 +139,137 @@ function App() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-          {/* Upload Section */}
+          {/* S3 Input Section */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-sm border p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">New Scan</h2>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">New Ad Project</h2>
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Scan Name
+                    Project Name
                   </label>
                   <input
                     type="text"
-                    value={scanName}
-                    onChange={(e) => setScanName(e.target.value)}
-                    placeholder="Enter scan name..."
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    placeholder="Enter project name..."
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Upload Images
+                    S3 Image Keys
                   </label>
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                      id="image-upload"
-                    />
-                    <label htmlFor="image-upload" className="cursor-pointer">
-                      <div className="space-y-2">
-                        <div className="text-gray-400">
-                          <svg className="mx-auto h-12 w-12" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          Click to upload images or drag and drop
-                        </div>
+                    <div className="space-y-2">
+                      <div className="text-gray-400">
+                        <svg className="mx-auto h-12 w-12" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                        </svg>
                       </div>
-                    </label>
+                      <div className="text-sm text-gray-600">
+                        Enter S3 keys to download product images
+                      </div>
+                    </div>
+                    <textarea
+                      placeholder="images/product1.jpg&#10;images/product2.jpg&#10;images/product3.jpg"
+                      className="w-full mt-3 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      rows={4}
+                      onChange={(e) => handleS3KeyInput(e.target.value.split('\n').filter(key => key.trim()))}
+                    />
                   </div>
                 </div>
 
-                {selectedImages.length > 0 && (
+                {s3ImageKeys.length > 0 && (
                   <div>
                     <div className="text-sm text-gray-600 mb-2">
-                      {selectedImages.length} images selected
+                      {s3ImageKeys.length} S3 keys entered
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {selectedImages.slice(0, 6).map((file, index) => (
-                        <div key={index} className="aspect-square bg-gray-100 rounded border overflow-hidden">
-                          <img
-                            src={URL.createObjectURL(file)}
-                            alt={`Preview ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
+                    <div className="max-h-32 overflow-y-auto">
+                      {s3ImageKeys.map((key, index) => (
+                        <div key={index} className="text-xs bg-gray-100 rounded px-2 py-1 mb-1 font-mono">
+                          {key}
                         </div>
                       ))}
-                      {selectedImages.length > 6 && (
-                        <div className="aspect-square bg-gray-100 rounded border flex items-center justify-center text-sm text-gray-500">
-                          +{selectedImages.length - 6} more
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
 
                 <button
-                  onClick={startScan}
-                  disabled={selectedImages.length === 0 || !scanName.trim()}
-                  className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  onClick={startAdGeneration}
+                  disabled={s3ImageKeys.length === 0 || !projectName.trim()}
+                  className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                 >
-                  Start 3D Scan
+                  Generate Advertisement
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Scans List */}
+          {/* Projects List */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow-sm border">
               <div className="px-6 py-4 border-b">
-                <h2 className="text-lg font-semibold text-gray-900">Recent Scans</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Recent Projects</h2>
               </div>
 
               <div className="divide-y">
-                {scans.length === 0 ? (
+                {projects.length === 0 ? (
                   <div className="p-8 text-center text-gray-500">
-                    No scans yet. Upload some images to get started!
+                    No projects yet. Create your first advertisement!
                   </div>
                 ) : (
-                  scans.map((scan) => (
-                    <div key={scan.id} className="p-6">
+                  projects.map((project) => (
+                    <div key={project.id} className="p-6">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h3 className="font-medium text-gray-900">{scan.name}</h3>
+                          <h3 className="font-medium text-gray-900">{project.name}</h3>
                           <p className="text-sm text-gray-500 mt-1">
-                            {scan.images.length} images • {scan.createdAt.toLocaleString()}
+                            {project.s3ImageKeys.length} S3 images • {project.createdAt.toLocaleString()}
                           </p>
 
                           {/* Status and Progress */}
                           <div className="mt-3">
                             <div className="flex items-center space-x-2">
-                              <StatusIcon status={scan.status} />
+                              <StatusIcon status={project.status} />
                               <span className="text-sm capitalize text-gray-700">
-                                {scan.status === 'uploading' ? 'Uploading images...' :
-                                 scan.status === 'processing' ? 'Generating 3D model...' :
-                                 scan.status === 'completed' ? 'Completed' :
+                                {project.status === 'downloading' ? 'Downloading images from S3...' :
+                                 project.status === 'generating' ? 'Generating advertisement video...' :
+                                 project.status === 'completed' ? 'Completed' :
                                  'Error'}
                               </span>
                             </div>
 
-                            {(scan.status === 'uploading' || scan.status === 'processing') && (
+                            {(project.status === 'downloading' || project.status === 'generating') && (
                               <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                                 <div
-                                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                  style={{ width: `${scan.progress}%` }}
+                                  className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+                                  style={{ width: `${project.progress}%` }}
                                 />
                               </div>
                             )}
                           </div>
 
-                          {/* Model Info */}
-                          {scan.model && (
-                            <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
-                              <h4 className="font-medium text-green-900 mb-2">3D Model Ready</h4>
-                              <p className="text-sm text-green-700 mb-3">{scan.model.description}</p>
+                          {/* Advertisement Info */}
+                          {project.advertisement && (
+                            <div className="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                              <h4 className="font-medium text-purple-900 mb-2">Advertisement Ready</h4>
+                              <p className="text-sm text-purple-700 mb-3">{project.advertisement.description}</p>
 
-                              {scan.model.measurements && (
-                                <div className="grid grid-cols-2 gap-2 text-sm">
-                                  {Object.entries(scan.model.measurements).map(([key, value]) => (
-                                    <div key={key} className="flex justify-between">
-                                      <span className="text-green-600">{key}:</span>
-                                      <span className="font-mono text-green-800">{value}</span>
-                                    </div>
-                                  ))}
+                              <div className="grid grid-cols-1 gap-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-purple-600">Duration:</span>
+                                  <span className="font-mono text-purple-800">{project.advertisement.duration}s</span>
                                 </div>
-                              )}
+                                {project.advertisement.script && (
+                                  <div className="mt-2">
+                                    <span className="text-purple-600 font-medium">Script:</span>
+                                    <p className="text-purple-700 text-xs mt-1 italic">{project.advertisement.script}</p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -294,46 +280,45 @@ function App() {
               </div>
             </div>
 
-            {/* Listings Section */}
-            {listings.length > 0 && (
+            {/* Campaigns Section */}
+            {campaigns.length > 0 && (
               <div className="mt-8 bg-white rounded-lg shadow-sm border">
                 <div className="px-6 py-4 border-b">
-                  <h2 className="text-lg font-semibold text-gray-900">Generated Listings</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Generated Campaigns</h2>
                 </div>
 
                 <div className="divide-y">
-                  {listings.map((listing) => (
-                    <div key={listing.id} className="p-6">
+                  {campaigns.map((campaign) => (
+                    <div key={campaign.id} className="p-6">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h3 className="font-medium text-gray-900">{listing.title}</h3>
-                          <p className="text-sm text-gray-600 mt-1">{listing.description}</p>
+                          <h3 className="font-medium text-gray-900">{campaign.title}</h3>
+                          <p className="text-sm text-gray-600 mt-1">{campaign.description}</p>
                           <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
-                            <span>Category: {listing.category}</span>
+                            <span>Category: {campaign.category}</span>
                             <span>•</span>
-                            <span>{listing.createdAt.toLocaleString()}</span>
+                            <span>Target: {campaign.targetAudience}</span>
+                            <span>•</span>
+                            <span>{campaign.createdAt.toLocaleString()}</span>
                           </div>
 
-                          {listing.measurements && (
-                            <div className="mt-3 p-3 bg-gray-50 rounded border">
-                              <div className="text-xs font-medium text-gray-700 mb-2">MEASUREMENTS</div>
-                              <div className="grid grid-cols-3 gap-2 text-xs">
-                                {Object.entries(listing.measurements).map(([key, value]) => (
-                                  <div key={key}>
-                                    <span className="text-gray-500">{key}</span>
-                                    <div className="font-mono text-gray-900">{value}</div>
-                                  </div>
-                                ))}
+                          {campaign.script && (
+                            <div className="mt-3 p-3 bg-blue-50 rounded border border-blue-200">
+                              <div className="text-xs font-medium text-blue-700 mb-2">ADVERTISEMENT SCRIPT</div>
+                              <p className="text-sm text-blue-800 italic">{campaign.script}</p>
+                              <div className="flex justify-between items-center mt-2 text-xs text-blue-600">
+                                <span>Duration: {campaign.duration}s</span>
+                                <span className="bg-blue-100 px-2 py-1 rounded">Ready for Review</span>
                               </div>
                             </div>
                           )}
                         </div>
 
                         <button
-                          onClick={() => setSelectedModel({ url: listing.modelUrl, title: listing.title })}
-                          className="ml-4 bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors"
+                          onClick={() => setSelectedVideo({ url: campaign.videoUrl, title: campaign.title })}
+                          className="ml-4 bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 transition-colors"
                         >
-                          View Model
+                          Preview Video
                         </button>
                       </div>
                     </div>
@@ -345,23 +330,23 @@ function App() {
         </div>
       </div>
 
-      {/* Model Viewer Modal */}
-      <ModelViewerModal
-        isOpen={selectedModel !== null}
-        onClose={() => setSelectedModel(null)}
-        modelUrl={selectedModel?.url || ''}
-        title={selectedModel?.title || ''}
+      {/* Video Preview Modal */}
+      <VideoPreviewModal
+        isOpen={selectedVideo !== null}
+        onClose={() => setSelectedVideo(null)}
+        videoUrl={selectedVideo?.url || ''}
+        title={selectedVideo?.title || ''}
       />
     </div>
   );
 }
 
-function StatusIcon({ status }: { status: ScanData['status'] }) {
+function StatusIcon({ status }: { status: AdProject['status'] }) {
   switch (status) {
-    case 'uploading':
+    case 'downloading':
       return <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />;
-    case 'processing':
-      return <div className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin" />;
+    case 'generating':
+      return <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />;
     case 'completed':
       return <div className="w-4 h-4 bg-green-600 rounded-full flex items-center justify-center">
         <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
